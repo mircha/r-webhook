@@ -9,15 +9,28 @@ import (
 	"os"
 )
 
-type requestData struct {
-	URL      string `json:"URL"`
-	NAME     string `json:"name"`
-	COMMENTS string `json:"comments"`
+type downloadResponse struct {
+	Message string `json:"message"`
+	Error   string `json:"error,omitempty"` // Optional field for errors
 }
 
-const (
-	token = "fio-u-8cp3REGKZNw6MgK8eHvRUQXEuRpfT_tRWn2K7OOyeu0hYM39CWqTQTa_j6aHdIa-"
-)
+type requestData struct {
+	Resource Resource `json:"resource"`
+	URL      string   `json:"original"`
+	NAME     string   `json:"name"`
+}
+
+type Resource struct {
+	ID   string `json:"id"`
+	TYPE string `json:"type"`
+}
+
+type fileData struct {
+	URL  string `json:"original"`
+	NAME string `json:"name"`
+}
+
+var token string
 
 func parseRequest(r *http.Request) (requestData, error) {
 
@@ -43,7 +56,7 @@ func parseRequest(r *http.Request) (requestData, error) {
 	return data, nil
 }
 
-func downloadFile(data requestData, token string) error {
+func downloadFile(data fileData, token string) error {
 	fmt.Println("Downloading file from", data.URL, "With name", data.NAME)
 
 	if data.NAME == "" {
@@ -100,24 +113,74 @@ func downloadFile(data requestData, token string) error {
 	return nil
 }
 
+func queryAsset(fields requestData, token string) (fileData, error) {
+	asset_id := fields.Resource.ID
+
+	fmt.Println("Querying asset with ID", asset_id, " and token:", token)
+	// Create a new HTTP client with bearer token
+	client := &http.Client{}
+	req, err := http.NewRequest(http.MethodGet, "https://api.frame.io/v2/assets/"+asset_id, nil)
+	if err != nil {
+		fmt.Println("Error creating request:", err)
+		return fileData{}, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	//get asset details
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Println("Error getting asset details:", err)
+		return fileData{}, err
+	}
+	defer resp.Body.Close()
+
+	// Decode into fileData struct
+	var data fileData
+	err = json.NewDecoder(resp.Body).Decode(&data)
+
+	// Read the response body
+	body, err := io.ReadAll(resp.Body)
+
+	// Print the response body as a string
+	fmt.Println("Response Body:", string(body))
+
+	return data, nil
+
+}
+
 func main() {
+	token := os.Getenv("TOKEN") // Get the token from the environment
+
+	if token == "" {
+		token = "fio-u-8cp3REGKZNw6MgK8eHvRUQXEuRpfT_tRWn2K7OOyeu0hYM39CWqTQTa_j6aHdIa-"
+	}
 	http.HandleFunc("/_/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Hello, world!"))
 	})
 
 	http.HandleFunc("/webhook", func(w http.ResponseWriter, r *http.Request) {
-		data, err := parseRequest(r)
+		fields, err := parseRequest(r)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
-		if data.URL == "" {
+		assetData, err := queryAsset(fields, token)
+
+		if assetData.URL == "" {
 			http.Error(w, "URL is required", http.StatusBadRequest)
 			return
 		}
 
-		downloadFile(data, token)
+		err = downloadFile(assetData, token)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		} else {
+			w.Header().Set("Content-Type", "application/json")
+			successResponse := downloadResponse{Message: "File downloaded successfully"}
+			json.NewEncoder(w).Encode(successResponse)
+		}
 
 	})
 	fmt.Println("Server listening on port %s")
