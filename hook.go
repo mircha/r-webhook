@@ -9,13 +9,26 @@ import (
 	"os"
 )
 
-type downloadResponse struct {
-	Message string `json:"message"`
-	Error   string `json:"error,omitempty"` // Optional field for errors
+type downloadResponseSimple struct {
+	Title       string `json:"title"`
+	Description string `json:"description"` // Optional field for errors
 }
 
+type downloadResponseForm struct {
+	Title       string       `json:"title"`
+	Description string       `json:"description"`
+	Fields      CustomFields `json:"fields"`
+}
+
+type CustomFields []struct {
+	Type  string `json:"type"`
+	Name  string `json:"name"`
+	Value string `json:"value"`
+	Label string `json:"label"`
+}
 type requestData struct {
 	Resource Resource `json:"resource"`
+	Data     Data     `json:"data"`
 	URL      string   `json:"original"`
 	NAME     string   `json:"name"`
 }
@@ -23,6 +36,10 @@ type requestData struct {
 type Resource struct {
 	ID   string `json:"id"`
 	TYPE string `json:"type"`
+}
+
+type Data struct {
+	downloadName string `json:"dw_name"`
 }
 
 type fileData struct {
@@ -165,6 +182,17 @@ func main() {
 			return
 		}
 
+		if fields.Data.downloadName == "" {
+			w.Header().Set("Content-Type", "application/json")
+			response := downloadResponseForm{
+				Title:       "Download File",
+				Description: "Please provide the name of the file to download",
+				Fields: CustomFields{
+					{Type: "text", Name: "dw_name", Value: "", Label: "File Name"},
+				},
+			}
+			json.NewEncoder(w).Encode(response)
+		}
 		assetData, err := queryAsset(fields, token)
 
 		if assetData.URL == "" {
@@ -178,7 +206,7 @@ func main() {
 			return
 		} else {
 			w.Header().Set("Content-Type", "application/json")
-			successResponse := downloadResponse{Message: "File downloaded successfully"}
+			successResponse := downloadResponseSimple{Title: "Yey!", Description: "File downloaded successfully"}
 			json.NewEncoder(w).Encode(successResponse)
 		}
 
