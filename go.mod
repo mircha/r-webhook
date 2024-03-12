@@ -1,6 +1,3 @@
-package main
-
-require(
-)
+module  hook
 
 go 1.19
