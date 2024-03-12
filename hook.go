@@ -39,7 +39,7 @@ type Resource struct {
 }
 
 type Data struct {
-	downloadName string `json:"dw_name"`
+	CUSTOMNAME string `json:"downloadName"`
 }
 
 type fileData struct {
@@ -73,11 +73,11 @@ func parseRequest(r *http.Request) (requestData, error) {
 	return data, nil
 }
 
-func downloadFile(data fileData, token string) error {
-	fmt.Println("Downloading file from", data.URL, "With name", data.NAME)
+func downloadFile(data fileData, token string, customName string) error {
+	fmt.Println("Downloading file from", data.URL, "With name", customName)
 
-	if data.NAME == "" {
-		data.NAME = "downloaded_file"
+	if customName == "" {
+		customName = "downloaded_file"
 	}
 
 	// Create a new HTTP client with bearer token
@@ -102,7 +102,7 @@ func downloadFile(data fileData, token string) error {
 	defer resp.Body.Close()
 
 	// Create the file for writing
-	file, err := os.Create(data.NAME)
+	file, err := os.Create(customName)
 	if err != nil {
 		fmt.Println("Error creating file:", err)
 		return err
@@ -111,7 +111,7 @@ func downloadFile(data fileData, token string) error {
 
 	// Handle potential content type for filename
 	contentType := resp.Header.Get("Content-Type")
-	filename := data.NAME // Default filename
+	filename := customName // Default filename
 	if contentType != "" {
 		// Extract extension from content type (logic depends on specific format)
 		// You can use libraries like "github.com/mattn/go-mimetype" for parsing
@@ -182,16 +182,17 @@ func main() {
 			return
 		}
 
-		if fields.Data.downloadName == "" {
+		if fields.Data.CUSTOMNAME == "" {
 			w.Header().Set("Content-Type", "application/json")
 			response := downloadResponseForm{
 				Title:       "Download File",
 				Description: "Please provide the name of the file to download",
 				Fields: CustomFields{
-					{Type: "text", Name: "dw_name", Value: "", Label: "File Name"},
+					{Type: "text", Name: "downloadName", Value: "", Label: "File Name"},
 				},
 			}
 			json.NewEncoder(w).Encode(response)
+			return
 		}
 		assetData, err := queryAsset(fields, token)
 
@@ -200,7 +201,7 @@ func main() {
 			return
 		}
 
-		err = downloadFile(assetData, token)
+		err = downloadFile(assetData, token, fields.Data.CUSTOMNAME)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
